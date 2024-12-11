@@ -1,0 +1,255 @@
+---
+title: "Sotera"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+library(ggsignif)  # or
+library(ggpubr)
+library(ggplot2)
+library(rstatix)
+library(tidyverse)
+library(dplyr)
+```
+
+## Sotera Visi Analysis
+
+Continuous Heart Rate and SPO2 Monitoring in post-surgical patients
+
+## Analysis of Sotera Visi data (continuous monitoring of vital signs)
+
+```{r load_data}
+# Run clinical data file generator
+
+#source("./data_request_20240423/30037614241CRFV21FAC_R_2024-04-24_0737.r")
+
+baseline= read.csv(file='./data_request_20240423/baseline_20190121.csv')
+Finalstudy =  read_csv(file='./data_request_20240423/Final_study_pop_20190107.csv')
+
+# DO NOT USE read_csv for this file
+monitoring = read.csv("./data_request_20240423/all_factor_visi_data.csv")
+
+intra_op = read_csv("./data_request_20240423/intraop_20190121.csv")
+```
+
+```{r}
+monitoring <- monitoring %>% rename(Study.ID=Study.ID.in.format....e.g..ppp.ss.nnnn.)
+monitoring <- monitoring %>% mutate(across(c(SPO2, PR, RR, CNIBP_SYS,CNIBP_DIA, CNIBP_MAP, BP_SYS, BP_MAP, BP_DIA, HR), as.double))
+```
+
+```{r}
+jama_p=read_csv("./data_request_20240423/primary_outcomes_jama_revision.csv")
+jama_s =read_csv("./data_request_20240423/secondary_outcomes_20190211.csv")
+```
+
+Subset data into continuous (visi) and nurse observations
+
+```{r}
+monitor_n = monitoring |> filter(!is.na(BP_SYS)) %>% select(-CNIBP_SYS, -CNIBP_DIA, -CNIBP_MAP) 
+monitor_v = monitoring |> filter(is.na(BP_SYS)) %>% select(-BP_SYS, -BP_DIA, -BP_MAP) %>% mutate(time = as_datetime(dev_reading_tm, format = "%d%b%Y:%H:%M:%S"))
+```
+
+```{r}
+sotera_summary = monitor_v %>% filter(Study.ID!="") %>% group_by(Study.ID) %>% 
+  summarise(as_tibble_row(quantile(SPO2, na.rm = TRUE), .name_repair=\(x) paste0('o2_q', parse_number(x))), 
+            as_tibble_row(quantile(PR, na.rm=TRUE), .name_repair=\(x) paste0('PR_q', parse_number(x))),
+            as_tibble_row(quantile(CNIBP_MAP, na.rm=TRUE), .name_repair=\(x) paste0('MAP_q', parse_number(x))),
+            stay = max(time)-min(time))
+            
+nurse_summary = monitor_n  %>% filter(Study.ID!="") %>% group_by(Study.ID) %>% 
+  summarise(mino2=min(SPO2), maxo2=max(SPO2), 
+            minHR=min(PR), maxHR=max(PR), 
+            minMAP=min(BP_MAP), maxMAP=max(BP_MAP),
+            visits=n())
+
+patient_summary = left_join(sotera_summary, nurse_summary)
+patient_summary$randomization_number = as.integer(str_replace_all(patient_summary$Study.ID,'-',''))
+
+patient_summary = left_join(patient_summary, baseline)
+```
+
+```{r}
+patient_summary$BMIHIGH=patient_summary$bmi>30
+patient_summary$stay_hrs = patient_summary$stay/3600
+```
+
+```{r}
+
+
+ggplot(data=patient_summary %>% filter(!is.na(mino2), !is.na(smoking_status))) + 
+    geom_point( aes(x=o2_q0, y=mino2, col="Q0"))+ 
+    geom_smooth(aes(x=o2_q0, y=mino2, col="Q0"), method = "lm")+
+    geom_point( aes(x=o2_q25, y=mino2, col="Q25")) + 
+    geom_smooth(aes(x=o2_q25, y=mino2, col="Q25"), method = "lm") + 
+    facet_wrap("BMIHIGH")+
+    xlab("Saturation Oxygen (Visi)") + ylab("Minimum Oxygen (Nurse)")
+  
+ggplot(data=patient_summary %>% filter(!is.na(minHR)))+
+    geom_point(aes(x=PR_q0, y=minHR, col="Q0")) +
+    geom_smooth(aes(x=PR_q0, y=minHR, col="Q0"), method = "lm")+
+    geom_point( aes(x=PR_q25, y=minHR, col="Q25")) +  
+    geom_smooth(aes(x=PR_q25, y=minHR, col="Q25"), method = "lm") + 
+  facet_wrap("BMIHIGH")+ 
+  xlab("PR (Visi)") + ylab("Minimum HR (Nurse)")
+
+ggplot(data=patient_summary %>% filter(!is.na(minMAP), minMAP!=0))+
+    geom_point(aes(x=MAP_q0, y=minMAP, col="Q0")) +
+      geom_smooth(aes(x=MAP_q0, y=minMAP, col="Q0"), method = "lm") + 
+      geom_point(aes(x=MAP_q25, y=minMAP, col="Q25")) +
+      geom_smooth(aes(x=MAP_q25, y=minMAP, col="Q25"), method = "lm") + 
+  facet_wrap("BMIHIGH")+ 
+  xlab("MAP (Visi)") + ylab("Minimum MAP (Nurse)")#+ geom_abline(slope=1) 
+
+```
+
+```{r}
+ggplot(data=patient_summary %>% filter(!is.na(visits))) + geom_boxplot(aes(y=stay_hrs, x=as.factor(visits)))
+```
+
+```{r}
+
+ggplot(data=patient_summary) + geom_point(aes(y=o2_q0, x=stay_hrs))
+ggplot(data=patient_summary) + geom_point(aes(y=mino2, x=stay_hrs))
+ggplot(data=patient_summary) + geom_point(aes(y=MAP_q0, x=stay_hrs))
+ggplot(data=patient_summary) + geom_point(aes(y=o2_q0, x=MAP_q0))
+ggplot(data=patient_summary) + geom_point(aes(y=o2_q0, x=age))
+
+
+```
+
+```{r}
+ggpairs(patient_summary %>% 
+          select(o2_q0, o2_q25, PR_q0, stay_hrs, age, bmi,
+                 minHR,mino2,minMAP, smoking_status, gender) %>% 
+          filter(!is.na(smoking_status)) %>%
+          mutate(across(c(o2_q0, MAP_q0, PR_q0, 
+                          stay_hrs, age, bmi,
+                          minHR,mino2,minMAP),as.numeric)) %>% 
+          mutate(across(c(gender, smoking_status), as.factor)), ggplot2::aes(colour=gender))
+```
+
+```{r}
+
+ggpairs(patient_summary %>% 
+          select(o2_q0, o2_q25, stay_hrs, age, bmi,mino2, smoking_status, gender, race) %>% 
+          filter(!is.na(smoking_status), !is.na(race)) %>%
+          mutate(across(c(o2_q0, o2_q25, 
+                          stay_hrs, age, bmi, mino2),as.numeric)) %>% mutate(race2=race==1) %>% 
+          mutate(across(c(gender, smoking_status, race), as.factor)) %>% select(-race), ggplot2::aes(colour=race2))
+```
+
+```{r}
+#SIMPLE MODEL, nothing changed
+ggplot(data = summaryg2, aes(x = age, y = `St1Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(data = summaryg2, aes(x = age, y = `St2Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(data = summaryg2, aes(x = age, y = `onetoone`, color = as.factor(gender))) + geom_point() + ylim(0,0.08) 
+ggplot(data = summaryg2, aes(x = bmi, y = `onetotwo`, color = as.factor(smoking_status))) + geom_point() + ylim(0.95,1) + xlim(20,40)
+ggplot(data = summaryg2, aes(x = bmi, y = `onetotwo`, color = as.factor(gender))) + geom_point() + ylim(0.95,1) + xlim(20,40)
+ggplot(summaryg2) + geom_boxplot(aes(x = interaction(gender, "St1Intercept"), y = St1Intercept, fill = gender), na.rm = TRUE) + geom_boxplot(aes(x = interaction(gender, "St2Intercept"), y = St2Intercept, fill = gender), na.rm = TRUE) + scale_fill_manual(values = c("female" = "pink", "male" = "lightblue")) + labs(title = "Boxplot of St1Intercept and St2Intercept by Gender",x = "gender",y = "Intercept Value") +theme_minimal()
+ggplot(data = summaryg2, aes(x = `diff2minus1`, y = `onetoone`, color = as.factor(age > 50))) + geom_point() + ylim(0.9,1)
+ggplot(data = summaryg2, aes(x = `diff2minus1`, y = `diff22minus11`, color = as.factor(bmi>26))) + geom_point() 
+
+```
+
+```{r}
+#Transition matrix values as boxplots vs. clinical features (perhaps including nurse measurements?)jk G = 2
+ggplot(summaryg2) + 
+  geom_boxplot(aes(x = interaction(gender, "onetoone"), y = onetoone, fill = gender), na.rm = TRUE) + geom_boxplot(aes(x = interaction(gender, "twototwo"), y = twototwo, fill = gender), na.rm = TRUE) + 
+  geom_boxplot(aes(x = interaction(smoking_status, "onetoone"), y = onetoone, fill = smoking_status), na.rm = TRUE) + geom_boxplot(aes(x = interaction(smoking_status, "twototwo"), y = twototwo, fill = smoking_status), na.rm = TRUE) + 
+  geom_boxplot(aes(x = interaction(bmi_category, "onetoone"), y = onetoone, fill = bmi_category), na.rm = TRUE) + geom_boxplot(aes(x = interaction(bmi_category, "twototwo"), y = twototwo, fill = bmi_category), na.rm = TRUE) + 
+  geom_boxplot(aes(x = interaction(age_category, "onetoone"), y = onetoone, fill = age_category), na.rm = TRUE) + geom_boxplot(aes(x = interaction(age_category, "twototwo"), y = twototwo, fill = age_category), na.rm = TRUE) + 
+  scale_fill_manual(values = c("female" = "pink", "male" = "lightblue", "smoking" = "green3", "non-smoking" = "blue4", "BMI >= 25" = "yellow2","BMI < 25" = "red3", "age >= 50" = "brown","age < 50" = "purple"))  + 
+  scale_x_discrete(labels = rep(c("1->1","1->1", "2->2", "2->2"),4)) +
+  labs(title = "Transition values (G = 2)",x = "transition states",y = "Intercept Value") +theme_minimal() + ylim(0.92,1) 
+
+summaryg2_long <- summaryg2[,c(3:5,7,18,74:79)] %>% pivot_longer(cols = c(bmi_category, age_category, gender, smoking_status), names_to = "transition", values_to = "value")
+
+ggplot(summaryg2_long) +     geom_boxplot(aes(x = interaction(transition, "onetoone"), y = onetoone, fill = value), na.rm = TRUE) + 
+ geom_boxplot(aes(x = interaction(transition, "twototwo"), y = twototwo, fill = value), na.rm = TRUE) + facet_wrap(~ transition,  scales = "free_x") +
+  stat_summary(
+    fun = mean, geom = "point",
+    shape = 16, size = 3, col = "grey"
+  ) +
+     scale_fill_manual(values = c("female" = "pink", "male" = "lightblue", "smoking" = "green3", "non-smoking" = "blue4", "BMI >= 30" = "yellow2","BMI < 30" = "red3", "age >= 50" = "brown","age < 50" = "purple"))  + 
+     scale_x_discrete(labels = c("1->1","2->2")) +
+     labs(title = "G = 2",x = "Transition states",y = "Transition values") + theme_minimal() + ylim(0.92,1) + 
+  stat_compare_means(aes(x = interaction(transition, "onetoone"), y = onetoone, group = value),method = "t.test", label = "p.signif") + 
+     stat_compare_means(aes(x = interaction(transition, "twototwo"), y = twototwo, group = value),method = "t.test", label = "p.signif")
+
+# calculating means
+mean_summaryg2_long <- summaryg2_long %>%
+  group_by(transition, value) %>%
+  summarise(
+    mean_onetoone = mean(onetoone, na.rm = TRUE),
+    mean_twototwo = mean(twototwo, na.rm = TRUE),
+    median_onetoone = median(onetoone, na.rm = TRUE),
+    median_twototwo = median(twototwo, na.rm = TRUE)
+)
+mean_summaryg2_long
+
+#plotting standard deviation
+ggplot(summaryg2_long) + geom_boxplot(aes(x = interaction(transition, "St1SD"), y = St1SD, fill = value), na.rm = TRUE) + 
+ geom_boxplot(aes(x = interaction(transition, "St2SD"), y = St2SD, fill = value), na.rm = TRUE) + facet_wrap(~ transition,  scales = "free_x") +
+     scale_fill_manual(values = c("female" = "pink", "male" = "lightblue", "smoking" = "green3", "non-smoking" = "blue4", "BMI >= 25" = "yellow2","BMI < 25" = "red3", "age >= 50" = "brown","age < 50" = "purple"))  + 
+     scale_x_discrete(labels = c("State 1","State 2")) +
+     labs(title = "G = 2",x = "Different States" ,y = "Standard deviation") + theme_minimal() +
+  stat_compare_means(aes(x = interaction(transition, "St1SD"), y = St1SD, group = value),method = "t.test", label = "p.signif") + 
+     stat_compare_means(aes(x = interaction(transition, "St2SD"), y = St2SD, group = value),method = "t.test", label = "p.signif")
+
+
+```
+
+```{r} 
+#Transition matrix values as boxplots vs. clinical features G = 3
+ggplot(summaryg2_long) + 
+     geom_boxplot(aes(x = interaction(transition, "onetoone"), y = onetoone, fill = value), na.rm = TRUE) + 
+     geom_boxplot(aes(x = interaction(transition, "twototwo"), y = twototwo, fill = value), na.rm = TRUE) + facet_wrap(~ transition,  scales = "free_x") +
+     geom_boxplot(aes(x = interaction(transition, "twototwo"), y = twototwo, fill = value), na.rm = TRUE) + facet_wrap(~ transition,  scales = "free_x") +
+     scale_fill_manual(values = c("female" = "pink", "male" = "lightblue", "smoking" = "green3", "non-smoking" = "blue4", "BMI >= 25" = "yellow2","BMI < 25" = "red3", "age >= 50" = "brown","age < 50" = "purple"))  + 
+     scale_x_discrete(labels = c("1->1","2->2")) +
+     labs(title = "G = 2",x = "transition states",y = "Transition Values") + theme_minimal() + ylim(0.92,1) + 
+  stat_compare_means(aes(x = interaction(transition, "onetoone"), y = onetoone, group = value),method = "t.test", label = "p.signif") + 
+     stat_compare_means(aes(x = interaction(transition, "twototwo"), y = twototwo, group = value),method = "t.test", label = "p.signif")
+
+```
+
+
+```{r}
+#ADDING SYSTOLIC AND DIASTOLIC BP INTO TRANSITION
+ggplot(data = summaryg2, aes(x = age, y = `St1Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(data = summaryg2, aes(x = age, y = `St2Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(summaryg2) + geom_boxplot(aes(x = interaction(gender, "St1Intercept"), y = St1Intercept, fill = gender), na.rm = TRUE) + geom_boxplot(aes(x = interaction(gender, "St2Intercept"), y = St2Intercept, fill = gender), na.rm = TRUE) + scale_fill_manual(values = c("female" = "pink", "male" = "lightblue")) + labs(title = "Boxplot of St1Intercept and St2Intercept by Gender",x = "gender",y = "Intercept Value") +theme_minimal()
+```
+
+```{r}
+{r} 
+#ADDING SYSTOLIC AND DIASTOLIC BP INTO TRANSITION
+ggplot(data = summaryg2, aes(x = age, y = `St1Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(data = summaryg2, aes(x = age, y = `St2Intercept`, color = as.factor(gender))) + geom_point()
+ggplot(summaryg2) + geom_boxplot(aes(x = interaction(gender, "St1Intercept"), y = St1Intercept, fill = gender), na.rm = TRUE) + geom_boxplot(aes(x = interaction(gender, "St2Intercept"), y = St2Intercept, fill = gender), na.rm = TRUE) + scale_fill_manual(values = c("female" = "pink", "male" = "lightblue")) + labs(title = "Boxplot of St1Intercept and St2Intercept by Gender",x = "gender",y = "Intercept Value") +theme_minimal()
+```
+
+
+```{r}
+#DO SPO2 AND HEART RATE CORRELATE?
+cor_visi_data <- data.frame(SPO2 = as.numeric(visi_data$SPO2), HR = as.numeric(visi_data$HR), StudyID = visi_data$StudyID, MAP = as.numeric(visi_data$CNIBP_MAP))
+cor_visi_data <- cor_visi_data %>% filter(!is.na(SPO2) & !is.na(HR)  & !is.na(MAP)) %>% filter(StudyID == "376010094")
+cor_test(cor_visi_data, "HR", "MAP", method = "spearman")
+cor_test(cor_visi_data, "SPO2", "MAP", method = "spearman")
+cor_test(cor_visi_data, "SPO2", "HR", method = "spearman")
+ggplot(cor_visi_data, aes(x = SPO2, y = HR)) +
+  geom_point() +  # Add points
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add a linear regression line
+  theme_minimal()
+```
+gaussian histogram
+
+```{r}
+ggplot(data = gaussianG[gaussianG$G == 3,]) + geom_histogram(aes(x = `Mean 1`, fill = "1"), binwidth = 1, alpha = 0.5) +
+   geom_histogram(aes(x = `Mean 2`, fill = "2"), binwidth = 1, alpha = 0.5) +
+   geom_histogram(aes(x = `Mean 3`, fill = "3"), binwidth = 1, alpha = 0.5) +  scale_fill_viridis(discrete = TRUE) + geom_vline(xintercept = 90, linetype = "dashed") + theme_minimal() + labs(x = "MeanSPO2", y = "Frequency") 
+``` 
+

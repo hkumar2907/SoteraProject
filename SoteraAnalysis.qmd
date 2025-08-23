@@ -202,7 +202,7 @@ ggplot(summaryg2_long) + geom_boxplot(aes(x = interaction(transition, "St1SD"), 
 
 ```
 
-```{r} 
+```{r}
 #Transition matrix values as boxplots vs. clinical features G = 3
 ggplot(summaryg2_long) + 
      geom_boxplot(aes(x = interaction(transition, "onetoone"), y = onetoone, fill = value), na.rm = TRUE) + 
@@ -215,7 +215,6 @@ ggplot(summaryg2_long) +
      stat_compare_means(aes(x = interaction(transition, "twototwo"), y = twototwo, group = value),method = "t.test", label = "p.signif")
 
 ```
-
 
 ```{r}
 #ADDING SYSTOLIC AND DIASTOLIC BP INTO TRANSITION
@@ -232,7 +231,6 @@ ggplot(data = summaryg2, aes(x = age, y = `St2Intercept`, color = as.factor(gend
 ggplot(summaryg2) + geom_boxplot(aes(x = interaction(gender, "St1Intercept"), y = St1Intercept, fill = gender), na.rm = TRUE) + geom_boxplot(aes(x = interaction(gender, "St2Intercept"), y = St2Intercept, fill = gender), na.rm = TRUE) + scale_fill_manual(values = c("female" = "pink", "male" = "lightblue")) + labs(title = "Boxplot of St1Intercept and St2Intercept by Gender",x = "gender",y = "Intercept Value") +theme_minimal()
 ```
 
-
 ```{r}
 #DO SPO2 AND HEART RATE CORRELATE?
 cor_visi_data <- data.frame(SPO2 = as.numeric(visi_data$SPO2), HR = as.numeric(visi_data$HR), StudyID = visi_data$StudyID, MAP = as.numeric(visi_data$CNIBP_MAP))
@@ -245,11 +243,11 @@ ggplot(cor_visi_data, aes(x = SPO2, y = HR)) +
   geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add a linear regression line
   theme_minimal()
 ```
+
 gaussian histogram
 
 ```{r}
 ggplot(data = gaussianG[gaussianG$G == 3,]) + geom_histogram(aes(x = `Mean 1`, fill = "1"), binwidth = 1, alpha = 0.5) +
    geom_histogram(aes(x = `Mean 2`, fill = "2"), binwidth = 1, alpha = 0.5) +
    geom_histogram(aes(x = `Mean 3`, fill = "3"), binwidth = 1, alpha = 0.5) +  scale_fill_viridis(discrete = TRUE) + geom_vline(xintercept = 90, linetype = "dashed") + theme_minimal() + labs(x = "MeanSPO2", y = "Frequency") 
-``` 
-
+```

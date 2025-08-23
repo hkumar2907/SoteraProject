@@ -1,0 +1,37 @@
+---
+title: "randomForestModelResults"
+format: html
+editor: visual
+---
+
+# RF, caret w/ 5
+
+## First features only
+
+```{r}
+columns <- c(colnames(summary_windowsTrain)[8:25], "post_hyp_binary")
+summary_windowsTrain2 <- summary_windowsTrain[,columns]
+summary_windowsTest2 <- summary_windowsTest[,columns]
+model_1 = train(post_hyp_binary ~ ., data=summary_windowsTrain2, 
+                method='rf', trControl = trainControl(method = "cv", number = 5))
+pred_1 <- predict(model_1, newdata = summary_windowsTest2)
+confusionMatrix(pred_1, summary_windowsTest2$post_hyp_binary)
+importance <- varImp(model_1, scale = FALSE)
+plot(importance, main = "RF, caret w/ 5 cv, first features only")
+```
+
+## Adding longest seq + maximum gap
+
+```{r}
+columns <- c(colnames(summary_windowsTrain)[8:25], "post_hyp_binary", "longest_hypoxic_seq", "maximum_gap")
+summary_windowsTrain2 <- summary_windowsTrain[,columns]
+summary_windowsTest2 <- summary_windowsTest[,columns]
+model_1 = train(post_hyp_binary ~ ., data=summary_windowsTrain2, 
+                method='rf', trControl = trainControl(method = "cv", number = 5))
+pred_1 <- predict(model_1, newdata = summary_windowsTest2)
+confusionMatrix(pred_1, summary_windowsTest2$post_hyp_binary)
+importance <- varImp(model_1, scale = FALSE)
+plot(importance, main = "RF, caret w/ 5 cv, first features + longest seq + maximum gap")
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
